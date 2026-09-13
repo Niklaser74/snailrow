@@ -52,8 +52,9 @@ function scoreThrough(row, squares, side) {
 }
 
 // What a bare marker on this square would be worth, ignoring headings. Cheap
-// enough to run over every candidate, good enough to rank them.
-function quick(row, i, side) {
+// enough to run over every candidate, good enough to rank them. Exported
+// because the realtime brain in race.js ranks squares the same way.
+export function squareScore(row, i, side) {
   const t = row.cells[i];
   row.cells[i] = side;
   const s = scoreThrough(row, [i], side);
@@ -103,36 +104,55 @@ export function winningMoves(row, side, cands = null) {
   return out;
 }
 
-// ---------- 3x3: solved ----------
-function key(row, side) { return row.cells.join('') + side; }
+// ---------- the small board: searched to the end ----------
+// Snällt tre i rad is not plain noughts and crosses. Each side owns three
+// snails, and once all six are out you move one to a neighbouring square
+// instead of placing a new one — which is what makes 3x3 a game at all
+// rather than a guaranteed draw. That also means the position can repeat
+// forever, so the search has a horizon: unresolved inside MAX_DEPTH plies
+// counts as level, and rules.js calls a draw after moveLimit moving turns.
+// Depth 8 is where it stops mattering: two hard players still always draw, and a
+// move takes ~50 ms instead of ~80.
+const MAX_DEPTH = 8;
 
-function solve(row, side, memo, depth = 0) {
-  if (row.winner) return row.winner === side ? 10 - depth : row.winner === 3 ? 0 : depth - 10;
-  const k = key(row, side);
-  if (memo.has(k)) return memo.get(k);
-  let best = -99;
-  for (let i = 0; i < row.cells.length; i++) {
-    if (row.cells[i]) continue;
-    const t = row.clone();
-    t.turn = side;
-    t.place(i, 'w');
-    const v = -solve(t, other(side), memo, depth + 1);
+// Negamax from the point of view of the side to play. It plays the move on the
+// board and takes it back rather than cloning: a clone per node made the search
+// slow enough to hang the test suite once the moving phase existed.
+function key(row) {
+  let k = String(row.turn);
+  for (let i = 0; i < row.cells.length; i++) k += row.cells[i];
+  return k;
+}
+
+function solve(row, depth, memo) {
+  if (depth >= MAX_DEPTH) return 0;
+  const side = row.turn;
+  const k = key(row) + ':' + (MAX_DEPTH - depth);
+  const hit = memo.get(k);
+  if (hit !== undefined) return hit;
+  let best = -999;
+  for (const m of row.options()) {
+    if (!row.apply(m)) continue;
+    const v = row.winner ? (row.winner === side ? 100 - depth : 0) : -solve(row, depth + 1, memo);
+    row.undo();
     if (v > best) best = v;
+    if (best >= 100 - depth) break; // nothing beats winning now
   }
+  if (best === -999) best = 0; // nowhere to go: treat as level
   memo.set(k, best);
   return best;
 }
 
-function bestTicTacToe(row, level, rnd) {
+function bestSmall(row, level, rnd) {
   const side = row.turn;
   const memo = new Map();
-  const moves = [];
-  for (let i = 0; i < row.cells.length; i++) {
-    if (row.cells[i]) continue;
-    const t = row.clone();
-    t.place(i, 'w');
-    moves.push({ i, dir: 'w', v: t.winner === side ? 99 : -solve(t, other(side), memo) });
-  }
+  const work = row.clone();
+  const moves = row.options().map((m) => {
+    if (!work.apply(m)) return { ...m, v: -999 };
+    const v = work.winner ? (work.winner === side ? 999 : 0) : -solve(work, 1, memo);
+    work.undo();
+    return { ...m, v };
+  }).filter((m) => m.v > -999);
   if (!moves.length) return null;
   moves.sort((a, b) => b.v - a.v);
   // Easy blunders often, normal now and then, hard never.
@@ -169,7 +189,7 @@ function bestGomoku(row, level, rnd) {
 
   // 3. Rank squares, then pick the heading.
   const ranked = all
-    .map((i) => ({ i, s: quick(row, i, me) + 0.92 * quick(row, i, opp) + (mustBlock.has(i) ? 5e5 : 0) }))
+    .map((i) => ({ i, s: squareScore(row, i, me) + 0.92 * squareScore(row, i, opp) + (mustBlock.has(i) ? 5e5 : 0) }))
     .sort((a, b) => b.s - a.s);
   const width = level === 'hard' ? 10 : level === 'normal' ? 6 : 4;
   const pool = ranked.slice(0, Math.max(1, width));
@@ -183,7 +203,7 @@ function bestGomoku(row, level, rnd) {
       const r = t.place(i, dir);
       if (!r) continue;
       if (t.winner === me) return { i, dir };
-      let score = scoreThrough(t, [i, ...r.trail], me) + 0.92 * quick(row, i, opp);
+      let score = scoreThrough(t, [i, ...r.trail], me) + 0.92 * squareScore(row, i, opp);
       if (mustBlock.has(i)) score += 5e5;
       if (t.winner === opp) score -= 1e7;        // failed to break their slime row
       else if (r.threat) score += 3200;          // a slime row: strong, but one move breaks it
@@ -200,7 +220,7 @@ function bestGomoku(row, level, rnd) {
 export function bestMove(row, level = 'normal', rnd = Math.random) {
   if (row.winner || row.full()) return null;
   if (!LEVELS.includes(level)) level = 'normal';
-  return row.size <= 5 && !row.trailLen ? bestTicTacToe(row, level, rnd) : bestGomoku(row, level, rnd);
+  return row.pieces ? bestSmall(row, level, rnd) : bestGomoku(row, level, rnd);
 }
 
 export { Row };

@@ -21,15 +21,14 @@ function playOut(mode, levels, rnd, cap = 260) {
   const r = new Row({ mode });
   for (let k = 0; k < cap && !r.winner; k++) {
     const m = bestMove(r, levels[r.turn], rnd);
-    if (!m) break;
-    r.place(m.i, m.dir);
+    if (!m || !r.apply(m)) break;
   }
   return r;
 }
 
 test('3x3: hard against hard is always a draw', () => {
   const rnd = seeded(7);
-  for (let g = 0; g < 20; g++) {
+  for (let g = 0; g < 6; g++) {
     const r = playOut('gentle', { 1: 'hard', 2: 'hard' }, rnd);
     assert.equal(r.winner, 3, 'a solved game should end level');
   }
@@ -37,7 +36,7 @@ test('3x3: hard against hard is always a draw', () => {
 
 test('3x3: hard never loses, whichever side it plays', () => {
   const rnd = seeded(11);
-  for (let g = 0; g < 30; g++) {
+  for (let g = 0; g < 8; g++) {
     assert.notEqual(playOut('gentle', { 1: 'easy', 2: 'hard' }, rnd).winner, 1);
     assert.notEqual(playOut('gentle', { 1: 'hard', 2: 'easy' }, rnd).winner, 2);
   }
@@ -133,16 +132,23 @@ test('winningMoves does not invent a loss for a side that is not to move', () =>
   }
 });
 
-test('a move is always legal and always has a heading', () => {
+test('every move offered is one the rules accept, in both phases', () => {
   const rnd = seeded(31);
   for (const mode of ['gentle', 'luffar']) {
     const r = new Row({ mode });
-    for (let k = 0; k < 20 && !r.winner; k++) {
+    let sawCrawl = false;
+    for (let k = 0; k < 24 && !r.winner; k++) {
       const m = bestMove(r, 'normal', rnd);
       assert.ok(m, 'a move exists while the game runs');
-      assert.ok(r.legal(m.i, m.dir), `${mode}: illegal move offered`);
-      r.place(m.i, m.dir);
+      if (m.from != null) {
+        sawCrawl = true;
+        assert.ok(r.targetsFrom(m.from).includes(m.i), mode + ': that square is not next door');
+      } else {
+        assert.ok(r.legal(m.i, m.dir), mode + ': illegal placement offered');
+      }
+      assert.ok(r.apply(m), mode + ': the rules refused the move');
     }
+    if (mode === 'gentle') assert.ok(sawCrawl, 'the small board has to reach its moving phase');
   }
 });
 

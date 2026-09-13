@@ -2,10 +2,11 @@
 // the slime. It knows nothing about who wins — main.js owns a Row from
 // rules.js and feeds this the positions; this file draws them and reports taps.
 //
-// A move is a square and a heading, so picking one takes two taps in Luffarsnigel:
-// tap the square, then tap the arrow for the edge the snail crawls in from.
-// Tapping the same square again takes the nearest edge. In Snällt tre i rad
-// there is no slime, so one tap is the whole move.
+// Two taps either way, but they mean different things per mode. In Luffarsnigel
+// a move is a square and a heading: tap the square, then tap the arrow for the
+// edge the snail crawls in from (tapping the square again takes the nearest
+// edge). In Snällt tre i rad you place three snails and then start moving them:
+// tap your own snail, then tap a free square next to it.
 import { drawSnail } from './game/snails.js';
 import { DIRS } from './rules.js';
 
@@ -20,12 +21,14 @@ export class Board {
     this.canvas = canvas;
     this.ctx = canvas.getContext('2d');
     this.row = null;
-    this.selected = null;      // index of the square being aimed
+    this.selected = null;      // index of the square being aimed (heading next)
+    this.from = null;          // your own snail, picked up to be moved
     this.hover = null;         // keyboard cursor
     this.anim = null;          // { side, path, trail, start, dur, target }
     this.interactive = false;
     this.speed = SPEEDS.normal;
     this.onMove = null;
+    this.onPick = null;   // something was picked up or aimed: the HUD wants to know
     this.reduced = opts.reduced ?? (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches);
     this.W = 0; this.H = 0; this.sq = 0; this.ox = 0; this.oy = 0;
     canvas.addEventListener('pointerdown', (e) => this.tap(e.clientX, e.clientY));
@@ -35,7 +38,10 @@ export class Board {
     requestAnimationFrame(loop);
   }
 
-  setRow(row) { this.row = row; this.selected = null; this.hover = null; this.anim = null; this.resize(); }
+  setRow(row) { this.row = row; this.selected = null; this.from = null; this.hover = null; this.anim = null; this.resize(); }
+
+  // In the moving phase a move starts by picking up one of your own snails.
+  moving() { return !!this.row && this.row.phase === 'move'; }
 
   resize() {
     const r = this.canvas.getBoundingClientRect();
@@ -85,16 +91,30 @@ export class Board {
       if (Math.hypot(px - a.x, py - a.y) <= a.r) return this.commit(this.selected, a.dir);
     }
     const i = this.squareAt(clientX, clientY);
-    if (i == null || this.row.cells[i]) { this.selected = null; return; }
+    if (i == null) { this.selected = null; this.from = null; return; }
+
+    if (this.moving()) {
+      if (this.row.cells[i] === this.row.turn) { this.from = this.from === i ? null : i; this.hover = i; this.picked(); return; }
+      if (this.from != null && this.row.targetsFrom(this.from).includes(i)) return this.commit(i, null, this.from);
+      this.from = null;
+      this.picked();
+      return;
+    }
+
+    if (this.row.cells[i]) { this.selected = null; return; }
     if (!this.row.trailLen) return this.commit(i, 'w');
     if (this.selected === i) return this.commit(i, this.row.nearestDir(i));
     this.selected = i;
     this.hover = i;
+    this.picked();
   }
 
-  commit(i, dir) {
+  picked() { if (this.onPick) this.onPick(); }
+
+  commit(i, dir, from = null) {
     this.selected = null;
-    if (this.onMove) this.onMove(i, dir);
+    this.from = null;
+    if (this.onMove) this.onMove(i, dir, from);
   }
 
   // ---------- keyboard ----------
@@ -117,11 +137,19 @@ export class Board {
       this.hover = this.row.inside(nx, ny) ? this.row.idx(nx, ny) : cur;
       return true;
     }
-    if ((k === 'Enter' || k === ' ') && this.hover != null && !this.row.cells[this.hover]) {
+    if (k === 'Enter' || k === ' ') {
+      if (this.hover == null) return false;
+      if (this.moving()) {
+        if (this.row.cells[this.hover] === this.row.turn) { this.from = this.from === this.hover ? null : this.hover; return true; }
+        if (this.from != null && this.row.targetsFrom(this.from).includes(this.hover)) { this.commit(this.hover, null, this.from); return true; }
+        return false;
+      }
+      if (this.row.cells[this.hover]) return false;
       if (!this.row.trailLen) this.commit(this.hover, 'w');
       else this.selected = this.hover;
       return true;
     }
+    if (k === 'Escape' && this.from != null) { this.from = null; return true; }
     return false;
   }
 
@@ -129,7 +157,7 @@ export class Board {
   // Resolves when the snail has reached its square.
   crawl(move) {
     if (!this.row) return Promise.resolve();
-    const path = this.row.crawlPath(move.i, move.dir);
+    const path = this.row.crawlPath(move.i, move.dir, move.from ?? null);
     const dur = this.reduced ? 0.12 : Math.min(2.4, Math.max(0.18, path.length * this.speed));
     this.anim = { side: move.side, path, trail: move.trail, start: now(), dur, target: move.i };
     return new Promise((res) => setTimeout(() => { this.anim = null; res(); }, dur * 1000));
@@ -197,6 +225,7 @@ export class Board {
       this.snail(this.anim.side, x, y, this.cx(b) >= this.cx(a) ? 1 : -1, t);
     }
 
+    if (this.from != null) this.showTargets(t);
     if (this.selected != null) this.aim(t);
 
     if (row.winner === 1 || row.winner === 2) this.line(row.winLine, SIDE_COLORS[row.winner], 1);
@@ -237,6 +266,30 @@ export class Board {
       ctx.stroke();
     }
     ctx.restore();
+  }
+
+  // The snail you picked up, and the squares it can crawl to.
+  showTargets(t) {
+    const { ctx, sq, row } = this;
+    const x = this.cx(this.from), y = this.cy(this.from);
+    ctx.save();
+    ctx.globalAlpha = 0.5 + Math.sin(t * 4) * 0.15;
+    ctx.strokeStyle = SIDE_COLORS[row.cells[this.from]] || '#1f1710';
+    ctx.lineWidth = Math.max(3, sq * 0.08);
+    ctx.strokeRect(x - sq / 2 + 2, y - sq / 2 + 2, sq - 4, sq - 4);
+    ctx.restore();
+    for (const j of row.targetsFrom(this.from)) {
+      ctx.save();
+      ctx.globalAlpha = 0.75;
+      ctx.fillStyle = SIDE_COLORS[row.turn];
+      ctx.strokeStyle = 'rgba(31,23,16,.7)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(this.cx(j), this.cy(j), Math.max(5, sq * 0.17), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   aim(t) {

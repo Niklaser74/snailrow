@@ -124,14 +124,14 @@ function nextTurn() {
   if (!human[row.turn]) computerMove();
 }
 
-board.onMove = (i, dir) => {
+board.onPick = refreshHud;
+board.onMove = (i, dir, from = null) => {
   if (busy || !row || row.winner || !human[row.turn]) return;
-  doMove(i, dir);
+  doMove(i, dir, from);
 };
 
-async function doMove(i, dir) {
-  const side = row.turn;
-  const res = row.place(i, dir);
+async function doMove(i, dir, from = null) {
+  const res = row.apply({ from, i, dir });
   if (!res) return;
   busy = true;
   board.interactive = false;
@@ -154,7 +154,7 @@ function computerMove() {
     const m = row && !row.winner ? bestMove(row, opts.opponent) : null;
     busy = false;
     if (!m) { nextTurn(); return; }
-    doMove(m.i, m.dir);
+    doMove(m.i, m.dir, m.from ?? null);
   }, 260);
 }
 
@@ -175,10 +175,10 @@ function finish() {
   store.del('game');
   const who = row.winner === 3 ? null : t('hud.turn.' + row.winner);
   $('over-title').textContent = row.winner === 3 ? t('over.draw') : t('over.win', { who });
-  let why = t('over.full');
+  let why = row.pieces ? t('over.stuck') : t('over.full');
   if (row.winner !== 3) {
     const clean = row.winLine.every((j) => row.cells[j] === row.winner);
-    why = clean ? t(row.mode === 'gentle' ? 'over.cleanGentle' : 'over.clean') : t('over.slime');
+    why = clean ? t(row.need === 3 ? 'over.cleanGentle' : 'over.clean') : t('over.slime');
   }
   $('over-why').textContent = why;
   setTimeout(() => { $('over').hidden = false; }, 900);
@@ -197,6 +197,9 @@ function refreshHud() {
   else if (busy) msg = t('hud.crawling');
   else if (!human[row.turn]) msg = t('hud.thinking');
   else if (board.selected != null) msg = t('hud.aim');
+  else if (board.from != null) msg = t('hud.pickTarget');
+  else if (row.phase === 'move') msg = t('hud.move');
+  else if (row.pieces) msg = t('hud.place', { left: row.pieces - row.count(row.turn) });
   else msg = human[1] && human[2] ? t('hud.pick') : t('hud.yourTurn');
   if (row.pending && !row.winner) msg = t('hud.threat', { who: t('hud.turn.' + row.pending.side) });
   $('hud-msg').textContent = msg;

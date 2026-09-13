@@ -12,16 +12,20 @@ function test(name, fn) {
 }
 const at = (r) => (x, y) => r.idx(x, y);
 
-test('two modes, and only the big one has slime', () => {
-  assert.deepEqual(MODE_IDS, ['gentle', 'luffar']);
+test('three modes; only the big one has slime, only the small one runs out of snails', () => {
+  assert.deepEqual(MODE_IDS, ['gentle', 'luffar', 'race']);
   assert.equal(MODES.gentle.trail, 0);
   assert.ok(MODES.luffar.trail > 0);
+  assert.equal(MODES.race.trail, 0);
   assert.equal(MODES.gentle.size, 3);
   assert.equal(MODES.luffar.size, 15);
+  assert.equal(MODES.race.size, 7);
+  assert.equal(MODES.gentle.pieces, 3);
+  assert.equal(MODES.luffar.pieces, 0, 'an endless supply never leaves the placing phase');
   assert.deepEqual(DIR_IDS.slice().sort(), ['e', 'n', 's', 'w']);
 });
 
-test('gentle: three in a row wins, and turns alternate', () => {
+test('gentle: three in a row wins while placing too, and turns alternate', () => {
   const r = new Row({ mode: 'gentle' });
   const I = at(r);
   assert.equal(r.turn, 1);
@@ -30,19 +34,91 @@ test('gentle: three in a row wins, and turns alternate', () => {
   r.place(I(1, 0));
   r.place(I(1, 1));
   assert.equal(r.winner, 0);
-  r.place(I(2, 0));
+  r.place(I(2, 0)); // yellow's third snail completes the top row
   assert.equal(r.winner, 1);
   assert.deepEqual(r.winLine, [I(0, 0), I(1, 0), I(2, 0)]);
 });
 
-test('gentle: a full board with no row is a draw', () => {
+test('gentle: three snails each, then the board switches to moving', () => {
   const r = new Row({ mode: 'gentle' });
   const I = at(r);
-  //  X O X
-  //  X X O
-  //  O X O
-  for (const [x, y] of [[0, 0], [1, 0], [2, 0], [2, 1], [1, 1], [0, 2], [0, 1], [2, 2], [1, 2]]) r.place(I(x, y));
-  assert.equal(r.winner, 3);
+  assert.equal(r.phase, 'place');
+  for (const [x, y] of [[0, 0], [1, 1], [2, 0], [0, 1], [0, 2], [2, 2]]) r.place(I(x, y));
+  assert.equal(r.count(1), 3);
+  assert.equal(r.count(2), 3);
+  assert.equal(r.phase, 'move');
+  assert.equal(r.legal(I(1, 0)), false, 'nobody may put out a fourth snail');
+  assert.equal(r.place(I(1, 0)), null);
+  assert.ok(r.options().length > 0);
+  assert.ok(r.options().every((m) => m.from != null), 'every option is now a move');
+});
+
+test('gentle: a snail crawls next door, never across the board', () => {
+  const r = new Row({ mode: 'gentle' });
+  const I = at(r);
+  for (const [x, y] of [[0, 0], [1, 1], [2, 0], [0, 1], [0, 2], [2, 2]]) r.place(I(x, y));
+  // yellow holds (0,0), (2,0), (0,2); the free squares are (1,0), (2,1), (1,2)
+  assert.deepEqual(r.targetsFrom(I(0, 0)).sort(), [I(1, 0)].sort());
+  assert.equal(r.moveTo(I(0, 0), I(1, 2)), null, 'not a neighbour');
+  assert.equal(r.moveTo(I(0, 1), I(1, 0)), null, 'not your snail');
+  const res = r.moveTo(I(0, 0), I(1, 0));
+  assert.ok(res);
+  assert.equal(r.cells[I(0, 0)], 0);
+  assert.equal(r.cells[I(1, 0)], 1);
+  assert.equal(r.turn, 2);
+});
+
+test('gentle: a move can win, and undo puts the snail back', () => {
+  const r = new Row({ mode: 'gentle' });
+  const I = at(r);
+  // yellow holds (0,0) (2,0) (1,1) — one crawl from three across the top
+  for (const [x, y] of [[0, 0], [0, 1], [2, 0], [0, 2], [1, 1], [2, 2]]) r.place(I(x, y));
+  assert.equal(r.winner, 0);
+  const res = r.moveTo(I(1, 1), I(1, 0));
+  assert.ok(res && res.win);
+  assert.equal(r.winner, 1);
+  assert.deepEqual(r.winLine, [I(0, 0), I(1, 0), I(2, 0)]);
+  r.undo();
+  assert.equal(r.winner, 0);
+  assert.equal(r.cells[I(1, 1)], 1);
+  assert.equal(r.cells[I(1, 0)], 0);
+  assert.equal(r.turn, 1);
+});
+
+test('gentle: crawling about forever is a draw, and the clock is the only reason', () => {
+  const r = new Row({ mode: 'gentle' });
+  const I = at(r);
+  for (const [x, y] of [[0, 0], [1, 1], [2, 0], [0, 1], [0, 2], [2, 2]]) r.place(I(x, y));
+  let guard = 0;
+  while (!r.winner && guard++ < 400) {
+    // shuffle back and forth without ever building a row: always undo-ish moves
+    const opts = r.options();
+    const m = opts[guard % opts.length];
+    const t = r.clone();
+    t.apply(m);
+    if (t.winner === 1 || t.winner === 2) { r.apply(opts.find((o) => o !== m) || m); continue; }
+    r.apply(m);
+  }
+  assert.equal(r.winner, 3, 'the move limit has to end it');
+  assert.equal(r.movesMade(), MODES.gentle.moveLimit);
+});
+
+test('gentle: a saved game remembers which phase it is in', () => {
+  const r = new Row({ mode: 'gentle' });
+  const I = at(r);
+  for (const [x, y] of [[0, 0], [1, 1], [2, 0], [0, 1], [0, 2], [2, 2]]) r.place(I(x, y));
+  r.moveTo(I(0, 0), I(1, 0));
+  const back = Row.fromJSON(JSON.parse(JSON.stringify(r.toJSON())));
+  assert.equal(back.phase, 'move');
+  assert.equal(back.count(1), 3);
+  assert.deepEqual(Array.from(back.cells), Array.from(r.cells));
+  assert.equal(back.movesMade(), 1);
+});
+
+test('the crawl of a moving snail starts where it stood', () => {
+  const r = new Row({ mode: 'gentle' });
+  const I = at(r);
+  assert.deepEqual(r.crawlPath(I(1, 1), null, I(0, 0)), [I(0, 0), I(1, 1)]);
 });
 
 test('the trail lands behind the snail, never in front', () => {

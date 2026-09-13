@@ -1,9 +1,11 @@
 // Luffarsnigel: the rules, and nothing else. No DOM, no canvas, no audio —
 // that is what makes test/rules.test.mjs and the AI possible in plain Node.
 //
-// Two modes share one board:
-//   gentle  3x3, three in a row, no slime. The game every child already knows.
+// Three modes share one board:
+//   gentle  3x3, three snails each. Place all three, then start MOVING them one
+//           square at a time — otherwise 3x3 is a solved draw and no game at all.
 //   luffar  15x15, five in a row, and the slime trail counts as half a marker.
+//   race    7x7, four in a row, no slime and no turns. race.js drives that one.
 //
 // The slime is the whole twist. A snail crawls in from an edge, so a move is a
 // square *and* a heading; the four squares behind it keep the fresh trail. Only
@@ -34,11 +36,18 @@ export const DIR_IDS = Object.keys(DIRS);
 // Balance lives here, not inline.
 export const MODES = {
   //        board  in a row  fresh trail squares  sum needed to win
-  gentle: { size: 3, need: 3, trail: 0, minSum: 3 },
+  // pieces: how many snails a side owns. 0 means an endless supply, so the game
+  // is pure placement. With a number, once both sides have all of theirs out the
+  // game switches to moving one snail to a neighbouring square per turn.
+  gentle: { size: 3, need: 3, trail: 0, minSum: 3, pieces: 3, moveLimit: 30 },
   // minSum 4.5 means at most ONE of the five may be trail: four markers and a
   // half. This is the playtest knob. At 4 (two trail squares allowed) two
   // markers in a row plus a well-aimed move already wins, which is no game.
-  luffar: { size: 15, need: 5, trail: 4, minSum: 4.5 },
+  luffar: { size: 15, need: 5, trail: 4, minSum: 4.5, pieces: 0 },
+  // Kryp i kapp: no slime at all, because the twist is the clock. The board is
+  // small enough to read while four snails are crawling across it. Turn order
+  // does not apply here — race.js drives this one and sets `turn` per arrival.
+  race: { size: 7, need: 4, trail: 0, minSum: 4, pieces: 0 },
 };
 export const MODE_IDS = Object.keys(MODES);
 export const MARKER = 1;
@@ -55,6 +64,8 @@ export class Row {
     this.need = m.need;
     this.trailLen = m.trail;
     this.minSum = m.minSum;
+    this.pieces = m.pieces || 0;      // 0 = endless supply, never leaves the placing phase
+    this.moveLimit = m.moveLimit || 0; // moving turns before it is called a draw
     this.cells = new Int8Array(this.size * this.size);
     this.trails = { 1: [], 2: [] }; // the fresh trail of each side, replaced every move
     this.turn = opts.first === 2 ? 2 : 1;
@@ -87,7 +98,13 @@ export class Row {
   }
 
   // The whole crawl from the edge to the target — for the animation, not the rules.
-  crawlPath(i, dir) {
+  // A moving snail crawls straight from where it stood instead.
+  crawlPath(i, dir, from = null) {
+    if (from != null) return [from, i];
+    return this.edgePath(i, dir);
+  }
+
+  edgePath(i, dir) {
     const d = DIRS[dir] || DIRS.w;
     const { x, y } = this.xy(i);
     let sx = x, sy = y;
@@ -109,9 +126,61 @@ export class Row {
     return d[0][0];
   }
 
+  // The eight squares around one, for the moving phase. A snail crawls to the
+  // square next door; it does not fly across the board.
+  neighbours(i) {
+    const { x, y } = this.xy(i);
+    const out = [];
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (!dx && !dy) continue;
+        if (this.inside(x + dx, y + dy)) out.push(this.idx(x + dx, y + dy));
+      }
+    }
+    return out;
+  }
+
+  count(side) {
+    let n = 0;
+    for (const c of this.cells) if (c === side) n++;
+    return n;
+  }
+
+  // 'place' while anyone still has snails to put out; 'move' once everyone is out.
+  get phase() {
+    if (!this.pieces) return 'place';
+    return this.count(1) < this.pieces || this.count(2) < this.pieces ? 'place' : 'move';
+  }
+
+  movesMade() { return this.moves.filter((m) => m.from != null).length; }
+
+  // Every legal move for the side to play, as { i, dir } or { from, i }.
+  options() {
+    const side = this.turn;
+    const out = [];
+    if (this.winner) return out;
+    if (this.phase === 'place') {
+      for (let i = 0; i < this.cells.length; i++) if (!this.cells[i]) out.push({ i, dir: 'w' });
+      return out;
+    }
+    for (let f = 0; f < this.cells.length; f++) {
+      if (this.cells[f] !== side) continue;
+      for (const t of this.neighbours(f)) if (!this.cells[t]) out.push({ from: f, i: t });
+    }
+    return out;
+  }
+
+  // The squares this snail may crawl to.
+  targetsFrom(from) {
+    if (this.winner || this.phase !== 'move' || this.cells[from] !== this.turn) return [];
+    return this.neighbours(from).filter((t) => !this.cells[t]);
+  }
+
   // ---------- moves ----------
   legal(i, dir = 'w') {
-    return this.winner === 0 && i >= 0 && i < this.cells.length && this.cells[i] === 0 && !!DIRS[dir];
+    if (this.winner !== 0 || i < 0 || i >= this.cells.length) return false;
+    if (this.cells[i] !== 0 || !DIRS[dir]) return false;
+    return this.phase === 'place' && (!this.pieces || this.count(this.turn) < this.pieces);
   }
 
   place(i, dir = 'w') {
@@ -122,7 +191,7 @@ export class Row {
     const was = this.pending;
     this.cells[i] = side;
     this.trails[side] = trail;   // the previous one dries
-    this.moves.push({ i, dir, side, trail, pending: was });
+    this.moves.push({ from: null, i, dir, side, trail, pending: was });
     this.pending = null;
 
     const line = this.winLineFor(side, [i, ...trail]);
@@ -142,6 +211,28 @@ export class Row {
     if (!this.winner) this.turn = foe;
     return { i, dir, side, trail, win: this.winner === side, threat: this.pending && this.pending.side === side ? this.pending.line : null };
   }
+
+  // The moving phase: one snail crawls to a neighbouring square. No slime here —
+  // every mode with a piece count has trail 0 — so a row is always five (or three)
+  // real snails and wins on the spot.
+  moveTo(from, to) {
+    if (this.winner || this.phase !== 'move') return null;
+    const side = this.turn;
+    if (this.cells[from] !== side || this.cells[to] !== 0) return null;
+    if (!this.neighbours(from).includes(to)) return null;
+    this.cells[from] = 0;
+    this.cells[to] = side;
+    this.moves.push({ from, i: to, dir: null, side, trail: [], pending: this.pending });
+    this.pending = null;
+    const line = this.winLineFor(side, [to]);
+    if (line) { this.winner = side; this.winLine = line; }
+    else if (this.moveLimit && this.movesMade() >= this.moveLimit) this.winner = DRAW;
+    else this.turn = other(side);
+    return { from, i: to, dir: null, side, trail: [], win: this.winner === side, threat: null };
+  }
+
+  // One entry point for both kinds of move, so the AI and the board can stay dumb.
+  apply(m) { return m.from != null ? this.moveTo(m.from, m.i) : this.place(m.i, m.dir || 'w'); }
 
   full() { return this.cells.every((c) => c !== 0); }
 
@@ -214,6 +305,7 @@ export class Row {
     if (!this.moves.length) return false;
     const m = this.moves.pop();
     this.cells[m.i] = 0;
+    if (m.from != null) this.cells[m.from] = m.side;
     const prev = [...this.moves].reverse().find((p) => p.side === m.side);
     this.trails[m.side] = prev ? prev.trail.slice() : [];
     this.turn = m.side;
