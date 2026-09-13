@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Luffarsnigel: squared paper, a slime trail crossing it, and a yellow snail
+       finishing the row. The grid is the game; the trail is the twist. -->
+  <defs>
+    <clipPath id="r"><rect x="0" y="0" width="512" height="512" rx="96"/></clipPath>
+  </defs>
+  <g clip-path="url(#r)">
+    <rect width="512" height="512" fill="#f7f1e2"/>
+    <g stroke="#b9c9a0" stroke-width="6">
+      <path d="M128 0 V512 M256 0 V512 M384 0 V512 M0 128 H512 M0 256 H512 M0 384 H512"/>
+    </g>
+    <!-- the slime trail along the middle row, drying to the left -->
+    <g fill="#f0c419">
+      <rect x="8" y="268" width="112" height="104" rx="30" opacity="0.16"/>
+      <rect x="136" y="268" width="112" height="104" rx="30" opacity="0.3"/>
+    </g>
+    <g stroke="#fff" stroke-width="12" stroke-linecap="round" fill="none" opacity="0.8">
+      <path d="M40 306 q30 -14 58 4"/>
+      <path d="M168 306 q30 -14 58 4"/>
+    </g>
+    <!-- blue markers blocking the column -->
+    <g fill="#3b82f6" opacity="0.9">
+      <circle cx="320" cy="64" r="34"/>
+      <circle cx="64" cy="192" r="34"/>
+      <circle cx="448" cy="448" r="34"/>
+    </g>
+  </g>
+  <!-- the yellow snail landing in the third square of the row, facing right -->
+  <g transform="translate(320 348) scale(5.6)" stroke="#4a2e1c" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M-22 0 Q-24 -6 -14 -8 L10 -8 Q24 -12 23 -4 Q24 0 18 0 Z" fill="#e0a878"/>
+    <path d="M4 -6 Q8 -20 18 -20 Q26 -20 24 -12 Q23 -6 16 -6 Z" fill="#e0a878"/>
+    <circle cx="-6" cy="-15" r="13.5" fill="#f0c419"/>
+    <path d="M-4.5 -15.5 a2 2 0 1 1 4 1.2 a5 5 0 1 1 -8.5 -3 a8.5 8.5 0 1 1 5 11" fill="none" stroke="#fff3d6" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M13 -19 Q15 -26 14 -31 M20 -19 Q24 -26 23 -34" fill="none" stroke="#e0a878" stroke-width="3.2" stroke-linecap="round"/>
+    <circle cx="14" cy="-32" r="4.6" fill="#fff" stroke-width="1"/><circle cx="23" cy="-35" r="4.6" fill="#fff" stroke-width="1"/>
+    <circle cx="15.5" cy="-32" r="2.2" fill="#1b1b1b" stroke="none"/><circle cx="24.5" cy="-35" r="2.2" fill="#1b1b1b" stroke="none"/>
+  </g>
+</svg>

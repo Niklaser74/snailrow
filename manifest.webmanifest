@@ -1,0 +1,23 @@
+{
+  "id": "/snailrow/",
+  "name": "Snail in a Row",
+  "short_name": "Snail Row",
+  "description": "Noughts and crosses with snails, and a fifteen-by-fifteen board where five in a row wins. The snails crawl to their square and leave slime behind them, and slime counts as half a marker. Offline, no account.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#6cc25a",
+  "theme_color": "#6cc25a",
+  "categories": ["games", "entertainment", "education"],
+  "prefer_related_applications": false,
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

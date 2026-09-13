@@ -1,0 +1,61 @@
+/* Same palette as Snäckmageddon, Snäckschack and the hub: ink, cream panels, warm lines, green accent, sky. */
+:root {
+  --ink: #1f1710;
+  --muted: #6a5a4a;
+  --panel: rgba(255, 250, 240, 0.97);
+  --line: #e0d4c2;
+  --chip: #efe6d6;
+  --accent: #3aaa5c;
+  --accent-ink: #fff;
+  --warn: #e2453c;
+  --hud: rgba(20, 15, 10, 0.62);
+  --grass: #6cc25a;
+  --grass-low: #9fd98f;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; overflow: hidden; background: linear-gradient(var(--grass), var(--grass-low) 75%); font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); -webkit-tap-highlight-color: transparent; }
+[hidden] { display: none !important; }
+button { font: inherit; }
+
+/* ---------- stage ---------- */
+#stage { position: fixed; inset: 0; padding: calc(54px + var(--safe-t)) 6px calc(10px + var(--safe-b)); }
+#board { width: 100%; height: 100%; display: block; touch-action: manipulation; }
+
+/* ---------- HUD ---------- */
+#hud { position: fixed; inset: 0; pointer-events: none; user-select: none; -webkit-user-select: none; }
+#hud > * { pointer-events: auto; }
+.hud-top { position: absolute; top: calc(8px + var(--safe-t)); left: 8px; right: 8px; display: flex; align-items: center; gap: 8px; }
+.team-chip { padding: 6px 14px; border-radius: 999px; font-weight: 800; font-size: 14px; background: var(--chip); flex: none; box-shadow: 0 2px 6px rgba(0,0,0,.18); }
+.message { font-size: 13px; font-weight: 700; color: #fff; background: var(--hud); padding: 6px 10px; border-radius: 10px; min-height: 0; line-height: 1.2; }
+.message:empty { display: none; }
+.message.warn { background: var(--warn); }
+.hud-btns { display: flex; gap: 6px; margin-left: auto; }
+.icon-btn { width: 40px; height: 36px; border: none; border-radius: 10px; background: var(--hud); color: #fff; font-size: 17px; cursor: pointer; flex: none; }
+
+/* ---------- overlays ---------- */
+.overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: rgba(108, 194, 90, 0.6); backdrop-filter: blur(3px); z-index: 10; overflow: auto; }
+.panel { position: relative; width: min(460px, 100%); max-height: calc(100vh - 32px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 22px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
+.panel.small { width: min(380px, 100%); text-align: center; }
+.panel h1 { margin: 6px 0 4px; font-size: 32px; line-height: 1.05; }
+.panel h2 { margin: 0 0 10px; font-size: 22px; }
+.tagline { margin: 0 0 6px; color: var(--muted); }
+.credit { margin: 0 0 16px; font-size: 13px; font-weight: 700; color: var(--accent); }
+.lang { position: absolute; top: 14px; right: 14px; display: flex; gap: 2px; background: var(--chip); border-radius: 999px; padding: 3px; }
+.lang button { font-size: 12px; font-weight: 700; border: 0; background: transparent; padding: 4px 10px; border-radius: 999px; cursor: pointer; color: var(--muted); }
+.lang button[aria-pressed="true"] { background: var(--ink); color: #fff; }
+.opts { display: grid; gap: 10px; margin-bottom: 16px; }
+.opts label { display: grid; gap: 4px; min-width: 0; font-size: 13px; font-weight: 700; color: var(--muted); }
+/* the long option labels would otherwise push the panel wider than the phone */
+.opts select { width: 100%; min-width: 0; font: inherit; font-weight: 600; color: var(--ink); padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.btn { border: 0; border-radius: 12px; padding: 11px 18px; font-weight: 800; cursor: pointer; text-decoration: none; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); flex: 1 1 100%; font-size: 17px; }
+.btn.secondary { background: var(--chip); color: var(--ink); }
+.btn:hover { filter: brightness(1.05); }
+.hint { min-height: 1.2em; margin: 10px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+footer { margin-top: 12px; font-size: 12px; color: var(--muted); text-align: center; }
+footer a { color: inherit; }
+#help p { line-height: 1.45; }
+.why { font-size: 14px; color: var(--muted); line-height: 1.45; margin: 0 0 14px; }
