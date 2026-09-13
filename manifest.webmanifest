@@ -2,7 +2,7 @@
   "id": "/snailrow/",
   "name": "Snail in a Row",
   "short_name": "Snail Row",
-  "description": "Noughts and crosses with snails, and a fifteen-by-fifteen board where five in a row wins. The snails crawl to their square and leave slime behind them, and slime counts as half a marker. Offline, no account.",
+  "description": "Noughts and crosses with snails, a fifteen-by-fifteen board where the slime trail counts as half a marker, and a realtime race with no turns at all. Offline, no account.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "./",

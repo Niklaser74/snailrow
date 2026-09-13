@@ -44,10 +44,11 @@ export const MODES = {
   // half. This is the playtest knob. At 4 (two trail squares allowed) two
   // markers in a row plus a well-aimed move already wins, which is no game.
   luffar: { size: 15, need: 5, trail: 4, minSum: 4.5, pieces: 0 },
-  // Kryp i kapp: no slime at all, because the twist is the clock. The board is
-  // small enough to read while four snails are crawling across it. Turn order
-  // does not apply here — race.js drives this one and sets `turn` per arrival.
-  race: { size: 7, need: 4, trail: 0, minSum: 4, pieces: 0 },
+  // Kryp i kapp: no slime at all, because the twist is the clock. Five in a row
+  // and not four — measured: with four the whole game is over in nine seconds and
+  // seven snails, which is not long enough for anyone to answer a threat. Turn
+  // order does not apply here; race.js drives this one and sets `turn` per arrival.
+  race: { size: 7, need: 5, trail: 0, minSum: 5, pieces: 0 },
 };
 export const MODE_IDS = Object.keys(MODES);
 export const MARKER = 1;

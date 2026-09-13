@@ -4,6 +4,7 @@
 import { Row, MODES, other } from './rules.js';
 import { bestMove } from './ai.js';
 import { Board, SIDE_COLORS, SPEEDS } from './board.js';
+import { Race, RaceBrain, RACE_SPEEDS } from './race.js';
 import { t, setLang, detectLang } from './i18n.js';
 import { setMuted, isMuted, unlockAudio, sfx } from './game/audio.js';
 import { APP_VERSION } from './config.js';
@@ -20,6 +21,8 @@ document.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('clic
 
 const board = new Board($('board'));
 let row = null;
+let race = null;                   // Kryp i kapp only: the realtime game
+let brains = [];
 let opts = { mode: 'gentle', opponent: 'normal', side: '1', speed: 'normal' };
 let human = { 1: true, 2: true };  // which sides a person plays
 let busy = false;                  // an animation or the computer is working
@@ -84,21 +87,42 @@ function sidesFor() {
 }
 
 function newGame() {
-  row = new Row({ mode: MODES[opts.mode] ? opts.mode : 'gentle' });
+  const mode = MODES[opts.mode] ? opts.mode : 'gentle';
   human = sidesFor();
-  board.setRow(row);
-  board.interactive = false;
-  busy = false;
+  $('over').hidden = true;   // a new game never starts behind the old result
   store.del('game');
   $('hud').hidden = false;
+  busy = false;
+  if (mode === 'race') return newRace();
+  race = null;
+  brains = [];
+  board.race = null;
+  row = new Row({ mode });
+  board.setRow(row);
+  board.interactive = false;
   refreshHud();
   nextTurn();
+}
+
+// Kryp i kapp runs on a clock instead of turns, so it has its own setup and its
+// own loop. A realtime game is not saved: it lasts a couple of minutes, and the
+// snails in the grass have nowhere sensible to wait.
+function newRace() {
+  race = new Race({ speed: RACE_SPEEDS[opts.speed] ?? RACE_SPEEDS.normal });
+  row = race.row;
+  brains = [1, 2].filter((s) => !human[s]).map((s) => new RaceBrain(s, opts.opponent));
+  board.setRace(race, human);
+  board.interactive = true;
+  refreshHud();
 }
 
 function resumeGame() {
   const saved = store.get('game', null);
   if (!saved) { newGame(); return; }
   try { row = Row.fromJSON(saved.row); } catch { newGame(); return; }
+  race = null;
+  brains = [];
+  board.race = null;
   opts = { ...opts, ...(saved.opts || {}) };
   loadOpts();
   human = saved.human || sidesFor();
@@ -111,6 +135,7 @@ function resumeGame() {
 }
 
 function save() {
+  if (race) return;                  // realtime games are not saved
   if (!row || row.winner) { store.del('game'); return; }
   store.set('game', { row: row.toJSON(), opts, human });
 }
@@ -146,6 +171,30 @@ async function doMove(i, dir, from = null) {
   nextTurn();
 }
 
+board.onSend = (side, i) => {
+  if (!race || race.winner || !human[side]) return;
+  if (race.send(side, i)) { sfx.tick(); refreshHud(); }
+  else sfx.tickLow();
+};
+
+let last = 0;
+function frame(ts) {
+  const dt = Math.min(0.05, last ? (ts - last) / 1000 : 0);
+  last = ts;
+  if (race && !race.winner && !paused()) {
+    race.advance(dt);
+    for (const b of brains) b.tick(race, dt);
+    for (const e of race.takeEvents()) {
+      if (e.type === 'land') { sfx.crate(); if (e.win) sfx.win(); }
+      else if (e.type === 'late') sfx.tickLow();
+    }
+    refreshHud();
+    if (race.winner) finish();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
 function computerMove() {
   busy = true;
   refreshHud();
@@ -159,7 +208,7 @@ function computerMove() {
 }
 
 function undo() {
-  if (!row || busy) return;
+  if (!row || busy || race) return;   // nothing to take back in realtime
   // Step back past the computer's reply too, so a person lands on their own move.
   row.undo();
   if (!human[row.turn] && row.moves.length) row.undo();
@@ -174,6 +223,12 @@ function finish() {
   board.interactive = false;
   store.del('game');
   const who = row.winner === 3 ? null : t('hud.turn.' + row.winner);
+  if (race) {
+    $('over-title').textContent = row.winner === 3 ? t('over.draw') : t('over.win', { who });
+    $('over-why').textContent = row.winner === 3 ? t('over.full') : t('over.race', { secs: Math.round(race.time) });
+    setTimeout(() => { $('over').hidden = false; }, 900);
+    return;
+  }
   $('over-title').textContent = row.winner === 3 ? t('over.draw') : t('over.win', { who });
   let why = row.pieces ? t('over.stuck') : t('over.full');
   if (row.winner !== 3) {
@@ -188,6 +243,17 @@ function finish() {
 function refreshHud() {
   if (!row) return;
   const chip = $('hud-turn');
+  if (race) {
+    // No turns to announce; show the fleet you have left instead.
+    const mine = board.soloHuman() || 1;
+    chip.textContent = t('hud.fleet', { n: race.slots(mine) });
+    chip.style.background = SIDE_COLORS[mine];
+    chip.style.color = mine === 1 ? '#1f1710' : '#fff';
+    $('hud-msg').textContent = race.winner ? '' : t(board.soloHuman() ? 'hud.raceSolo' : 'hud.raceTwo');
+    $('hud-msg').classList.remove('warn');
+    $('btn-undo').hidden = true;
+    return;
+  }
   chip.textContent = t('hud.turn.' + row.turn);
   chip.style.background = SIDE_COLORS[row.turn];
   chip.style.color = row.turn === 1 ? '#1f1710' : '#fff';
