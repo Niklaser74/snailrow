@@ -2,11 +2,11 @@
   "name": "snailrow",
   "version": "0.1.0",
   "private": true,
-  "description": "Luffarsnigel – tre i rad, luffarschack och en kapplöpning, med sniglar. Tre lägen på samma bräde: tre sniglar var som kryper vidare, slemspår som räknas som halv markör, och realtid utan turordning. PWA utan byggsteg.",
+  "description": "Luffarsnigel – fyra lägen med sniglar: tre i rad där de kryper vidare, luffarschack med slemspår, en kapplöpning utan turordning, och en vandrande rad där ingen står still. PWA utan byggsteg.",
   "type": "module",
   "scripts": {
     "start": "node scripts/serve.mjs",
-    "test": "node test/paths.test.mjs && node test/rules.test.mjs && node test/ai.test.mjs && node test/race.test.mjs && node test/sw.test.mjs",
+    "test": "node test/paths.test.mjs && node test/rules.test.mjs && node test/ai.test.mjs && node test/race.test.mjs && node test/wander.test.mjs && node test/sw.test.mjs",
     "sync:game": "node scripts/sync-game.mjs",
     "icons": "node scripts/icons.mjs"
   },

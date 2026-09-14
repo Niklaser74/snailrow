@@ -2,7 +2,7 @@
   "id": "/snailrow/",
   "name": "Snail in a Row",
   "short_name": "Snail Row",
-  "description": "Noughts and crosses with snails, a fifteen-by-fifteen board where the slime trail counts as half a marker, and a realtime race with no turns at all. Offline, no account.",
+  "description": "Four games with snails: noughts and crosses where they crawl on, five in a row where the slime trail counts as half a marker, a realtime race with no turns, and a wandering row where nothing stands still. Offline, no account.",
   "lang": "en",
   "dir": "ltr",
   "start_url": "./",

@@ -49,6 +49,9 @@ export const MODES = {
   // seven snails, which is not long enough for anyone to answer a threat. Turn
   // order does not apply here; race.js drives this one and sets `turn` per arrival.
   race: { size: 7, need: 5, trail: 0, minSum: 5, pieces: 0 },
+  // Vandrande rad: nobody stands still, so a row exists for one round and is
+  // gone. wander.js owns the movement; this is only the board and the win check.
+  wander: { size: 5, need: 4, trail: 0, minSum: 4, pieces: 5 },
 };
 export const MODE_IDS = Object.keys(MODES);
 export const MARKER = 1;

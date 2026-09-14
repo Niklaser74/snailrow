@@ -12,14 +12,16 @@ function test(name, fn) {
 }
 const at = (r) => (x, y) => r.idx(x, y);
 
-test('three modes; only the big one has slime, only the small one runs out of snails', () => {
-  assert.deepEqual(MODE_IDS, ['gentle', 'luffar', 'race']);
+test('four modes; only one has slime, and two run out of snails', () => {
+  assert.deepEqual(MODE_IDS, ['gentle', 'luffar', 'race', 'wander']);
   assert.equal(MODES.gentle.trail, 0);
   assert.ok(MODES.luffar.trail > 0);
   assert.equal(MODES.race.trail, 0);
   assert.equal(MODES.gentle.size, 3);
   assert.equal(MODES.luffar.size, 15);
   assert.equal(MODES.race.size, 7);
+  assert.equal(MODES.wander.trail, 0);
+  assert.equal(MODES.wander.pieces, 5, 'Vandrande rad delar ut fem sniglar var');
   assert.equal(MODES.gentle.pieces, 3);
   assert.equal(MODES.luffar.pieces, 0, 'an endless supply never leaves the placing phase');
   assert.deepEqual(DIR_IDS.slice().sort(), ['e', 'n', 's', 'w']);

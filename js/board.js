@@ -8,6 +8,11 @@
 // The pointer id keeps two thumbs apart, so both players can send at once.
 // With only one person playing, a plain tap on a square works too.
 //
+// Vandrande rad reuses the heading arrows: putting a snail out is a square and a
+// heading, exactly as in Luffarsnigel. Once your snails are all out, tapping one
+// of your own turns it round — one tap, no confirmation, because that is the only
+// move there is.
+//
 // Otherwise: two taps either way, but they mean different things per mode. In Luffarsnigel
 // a move is a square and a heading: tap the square, then tap the arrow for the
 // edge the snail crawls in from (tapping the square again takes the nearest
@@ -33,9 +38,12 @@ export class Board {
     this.anim = null;          // { side, path, trail, start, dur, target }
     this.interactive = false;
     this.race = null;          // Kryp i kapp: the realtime game, if that is the mode
+    this.wander = null;        // Vandrande rad: the game whose snails all move
+    this.walk = null;          // the crawl being animated: { steps, start, dur }
     this.humans = { 1: true, 2: true };
     this.drags = new Map();    // pointerId -> { side, x, y }
     this.onSend = null;
+    this.onWander = null;
     this.speed = SPEEDS.normal;
     this.onMove = null;
     this.onPick = null;   // something was picked up or aimed: the HUD wants to know
@@ -52,6 +60,15 @@ export class Board {
   }
 
   setRow(row) { this.row = row; this.selected = null; this.from = null; this.hover = null; this.anim = null; this.resize(); }
+
+  setWander(w) {
+    this.wander = w;
+    this.walk = null;
+    this.setRow(w.row);
+  }
+
+  // Vandrande rad: your snails are all out, so a turn is turning one around.
+  steering() { return !!this.wander && this.wander.phase === 'steer'; }
 
   setRace(race, humans) {
     this.race = race;
@@ -117,7 +134,8 @@ export class Board {
   // Where the four headings sit around the selected square, and how big the
   // touch target is — never smaller than a thumb, however small the squares get.
   arrows() {
-    if (this.selected == null || !this.row || !this.row.trailLen) return [];
+    if (this.selected == null || !this.row) return [];
+    if (!this.row.trailLen && !this.wander) return [];
     const r = Math.max(19, this.sq * 0.72);
     const gap = Math.max(this.sq * 1.15, r * 2.15); // the four must not overlap
     const cx = this.cx(this.selected), cy = this.cy(this.selected);
@@ -165,10 +183,25 @@ export class Board {
     const rect = this.canvas.getBoundingClientRect();
     const px = clientX - rect.left, py = clientY - rect.top;
     for (const a of this.arrows()) {
-      if (Math.hypot(px - a.x, py - a.y) <= a.r) return this.commit(this.selected, a.dir);
+      if (Math.hypot(px - a.x, py - a.y) <= a.r) {
+        return this.wander ? this.commitWander({ i: this.selected, dir: a.dir }) : this.commit(this.selected, a.dir);
+      }
     }
     const i = this.squareAt(clientX, clientY);
     if (i == null) { this.selected = null; this.from = null; return; }
+
+    if (this.wander) {
+      if (this.steering()) {
+        if (this.row.cells[i] === this.wander.turn) this.commitWander({ flip: i });
+        return;
+      }
+      if (this.row.cells[i]) { this.selected = null; return; }
+      if (this.selected === i) return this.commitWander({ i, dir: this.row.nearestDir(i) });
+      this.selected = i;
+      this.hover = i;
+      this.picked();
+      return;
+    }
 
     if (this.moving()) {
       if (this.row.cells[i] === this.row.turn) { this.from = this.from === i ? null : i; this.hover = i; this.picked(); return; }
@@ -188,6 +221,11 @@ export class Board {
 
   picked() { if (this.onPick) this.onPick(); }
 
+  commitWander(m) {
+    this.selected = null;
+    if (this.onWander) this.onWander(m);
+  }
+
   commit(i, dir, from = null) {
     this.selected = null;
     this.from = null;
@@ -198,6 +236,21 @@ export class Board {
   key(k) {
     if (!this.interactive || !this.row || this.row.winner) return false;
     const n = this.row.size;
+    if (this.wander && this.selected != null) {
+      const dir = { ArrowLeft: 'w', ArrowRight: 'e', ArrowUp: 'n', ArrowDown: 's' }[k];
+      if (dir) { this.commitWander({ i: this.selected, dir }); return true; }
+      if (k === 'Enter' || k === ' ') { this.commitWander({ i: this.selected, dir: this.row.nearestDir(this.selected) }); return true; }
+      if (k === 'Escape') { this.selected = null; return true; }
+      return false;
+    }
+    if (this.wander && (k === 'Enter' || k === ' ') && this.hover != null) {
+      if (this.steering()) {
+        if (this.row.cells[this.hover] === this.wander.turn) { this.commitWander({ flip: this.hover }); return true; }
+        return false;
+      }
+      if (!this.row.cells[this.hover]) { this.selected = this.hover; this.picked(); return true; }
+      return false;
+    }
     if (this.selected != null && this.row.trailLen) {
       // Aiming: an arrow key is the edge the snail comes from.
       const dir = { ArrowLeft: 'w', ArrowRight: 'e', ArrowUp: 'n', ArrowDown: 's' }[k];
@@ -238,6 +291,15 @@ export class Board {
     const dur = this.reduced ? 0.12 : Math.min(2.4, Math.max(0.18, path.length * this.speed));
     this.anim = { side: move.side, path, trail: move.trail, start: now(), dur, target: move.i };
     return new Promise((res) => setTimeout(() => { this.anim = null; res(); }, dur * 1000));
+  }
+
+  // Everyone crawls at once. Blocked snails stay put and turn around, which the
+  // heading arrow shows the moment the crawl finishes.
+  crawlAll(steps) {
+    if (!steps || !steps.length) return Promise.resolve();
+    const dur = this.reduced ? 0.1 : Math.max(0.2, Math.min(0.7, this.speed * 4));
+    this.walk = { steps, start: now(), dur };
+    return new Promise((res) => setTimeout(() => { this.walk = null; res(); }, dur * 1000));
   }
 
   // ---------- drawing ----------
@@ -286,9 +348,13 @@ export class Board {
     }
 
     const hidden = this.anim ? this.anim.target : -1;
-    for (let i = 0; i < row.cells.length; i++) {
-      if (!row.cells[i] || i === hidden) continue;
-      this.snail(row.cells[i], this.cx(i), this.cy(i), 1, t);
+    if (this.walk) this.drawWalk(t);
+    else {
+      for (let i = 0; i < row.cells.length; i++) {
+        if (!row.cells[i] || i === hidden) continue;
+        this.snail(row.cells[i], this.cx(i), this.cy(i), 1, t);
+        if (this.wander) this.heading(i, row.cells[i]);
+      }
     }
 
     if (this.anim) {
@@ -405,6 +471,58 @@ export class Board {
     ctx.arcTo(x, y + h, x, y, r);
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
+  }
+
+  // A small arrow at the edge of the square: which way this snail is going.
+  heading(i, side, dir = null) {
+    const d = DIRS[dir || (this.wander ? this.wander.dirOf(i) : null)];
+    if (!d) return;
+    const { ctx, sq } = this;
+    const r = Math.max(4, sq * 0.13);
+    const x = this.cx(i) + d.dx * (sq * 0.5 - r * 1.1);
+    const y = this.cy(i) + d.dy * (sq * 0.5 - r * 1.1);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.atan2(d.dy, d.dx));
+    ctx.beginPath();
+    ctx.moveTo(r, 0);
+    ctx.lineTo(-r * 0.75, -r * 0.85);
+    ctx.lineTo(-r * 0.75, r * 0.85);
+    ctx.closePath();
+    // a pale halo first, so the arrow still reads where it lands on a snail
+    ctx.strokeStyle = 'rgba(255,250,240,.95)';
+    ctx.lineWidth = 4;
+    ctx.stroke();
+    ctx.fillStyle = SIDE_COLORS[side];
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(31,23,16,.85)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Everyone mid-crawl, interpolated from where they were to where they land.
+  drawWalk(t) {
+    const { row, sq } = this;
+    const k = Math.min(1, (t - this.walk.start) / this.walk.dur);
+    const e = ease(k);
+    for (const m of this.walk.steps) {
+      const side = row.cells[m.blocked ? m.from : m.to];
+      if (!side) continue;
+      const fx = this.cx(m.from), fy = this.cy(m.from);
+      let x = fx, y = fy;
+      if (m.blocked) {
+        // a little nudge and back: it tried, and bumped
+        const d = DIRS[this.wander ? this.wander.dirOf(m.from) : null];
+        const bump = Math.sin(e * Math.PI) * sq * 0.16;
+        if (d) { x = fx - d.dx * bump; y = fy - d.dy * bump; }
+      } else {
+        x = fx + (this.cx(m.to) - fx) * e;
+        y = fy + (this.cy(m.to) - fy) * e;
+      }
+      this.snail(side, x, y, 1, t);
+      if (this.wander) this.heading(m.blocked ? m.from : m.to, side);
+    }
   }
 
   snail(side, x, y, facing, t) {

@@ -5,6 +5,7 @@ import { Row, MODES, other } from './rules.js';
 import { bestMove } from './ai.js';
 import { Board, SIDE_COLORS, SPEEDS } from './board.js';
 import { Race, RaceBrain, RACE_SPEEDS } from './race.js';
+import { Wander, bestWander } from './wander.js';
 import { t, setLang, detectLang } from './i18n.js';
 import { setMuted, isMuted, unlockAudio, sfx } from './game/audio.js';
 import { APP_VERSION } from './config.js';
@@ -22,6 +23,7 @@ document.querySelectorAll('[data-lang]').forEach((b) => b.addEventListener('clic
 const board = new Board($('board'));
 let row = null;
 let race = null;                   // Kryp i kapp only: the realtime game
+let wander = null;                 // Vandrande rad only: the game that moves itself
 let brains = [];
 let opts = { mode: 'gentle', opponent: 'normal', side: '1', speed: 'normal' };
 let human = { 1: true, 2: true };  // which sides a person plays
@@ -94,11 +96,29 @@ function newGame() {
   $('hud').hidden = false;
   busy = false;
   if (mode === 'race') return newRace();
+  if (mode === 'wander') return newWander();
+  race = null;
+  wander = null;
+  brains = [];
+  board.race = null;
+  board.wander = null;
+  row = new Row({ mode });
+  board.setRow(row);
+  board.interactive = false;
+  refreshHud();
+  nextTurn();
+}
+
+// Vandrande rad is turn based like the others, but a turn ends with every snail
+// on the board crawling a square, so the move and the crawl are animated in one
+// go and the win check happens after the crawl, not after the move.
+function newWander() {
   race = null;
   brains = [];
   board.race = null;
-  row = new Row({ mode });
-  board.setRow(row);
+  wander = new Wander();
+  row = wander.row;
+  board.setWander(wander);
   board.interactive = false;
   refreshHud();
   nextTurn();
@@ -119,10 +139,28 @@ function newRace() {
 function resumeGame() {
   const saved = store.get('game', null);
   if (!saved) { newGame(); return; }
+  if (saved.wander) {
+    try { wander = Wander.fromJSON(saved.wander); } catch { newGame(); return; }
+    opts = { ...opts, ...(saved.opts || {}) };
+    loadOpts();
+    human = saved.human || sidesFor();
+    race = null;
+    brains = [];
+    board.race = null;
+    row = wander.row;
+    board.setWander(wander);
+    busy = false;
+    $('hud').hidden = false;
+    refreshHud();
+    nextTurn();
+    return;
+  }
   try { row = Row.fromJSON(saved.row); } catch { newGame(); return; }
   race = null;
+  wander = null;
   brains = [];
   board.race = null;
+  board.wander = null;
   opts = { ...opts, ...(saved.opts || {}) };
   loadOpts();
   human = saved.human || sidesFor();
@@ -137,6 +175,7 @@ function resumeGame() {
 function save() {
   if (race) return;                  // realtime games are not saved
   if (!row || row.winner) { store.del('game'); return; }
+  if (wander) { store.set('game', { wander: wander.toJSON(), opts, human }); return; }
   store.set('game', { row: row.toJSON(), opts, human });
 }
 
@@ -144,12 +183,33 @@ function save() {
 function nextTurn() {
   if (!row) return;
   if (row.winner) { finish(); return; }
-  board.interactive = !!human[row.turn];
+  const side = wander ? wander.turn : row.turn;
+  board.interactive = !!human[side];
   refreshHud();
-  if (!human[row.turn]) computerMove();
+  if (!human[side]) computerMove();
 }
 
 board.onPick = refreshHud;
+board.onWander = (mv) => {
+  if (busy || !wander || wander.winner || !human[wander.turn]) return;
+  doWander(mv);
+};
+
+async function doWander(mv) {
+  const res = wander.play(mv);
+  if (!res) return;
+  busy = true;
+  board.interactive = false;
+  refreshHud();
+  if (res.kind === 'place') { sfx.tick(); await board.crawl({ ...res, from: null }); }
+  else sfx.turn();
+  if (res.steps) { sfx.tickLow(); await board.crawlAll(res.steps); }
+  if (wander.winner && wander.winner !== 3) sfx.win();
+  busy = false;
+  save();
+  refreshHud();
+  nextTurn();
+}
 board.onMove = (i, dir, from = null) => {
   if (busy || !row || row.winner || !human[row.turn]) return;
   doMove(i, dir, from);
@@ -200,6 +260,13 @@ function computerMove() {
   refreshHud();
   // Let the HUD paint before the search blocks the thread.
   setTimeout(() => {
+    if (wander) {
+      const mv = !wander.winner ? bestWander(wander, opts.opponent) : null;
+      busy = false;
+      if (!mv) { nextTurn(); return; }
+      doWander(mv);
+      return;
+    }
     const m = row && !row.winner ? bestMove(row, opts.opponent) : null;
     busy = false;
     if (!m) { nextTurn(); return; }
@@ -208,7 +275,7 @@ function computerMove() {
 }
 
 function undo() {
-  if (!row || busy || race) return;   // nothing to take back in realtime
+  if (!row || busy || race || wander) return;   // nothing to take back in realtime, or once everyone has moved
   // Step back past the computer's reply too, so a person lands on their own move.
   row.undo();
   if (!human[row.turn] && row.moves.length) row.undo();
@@ -231,7 +298,9 @@ function finish() {
   }
   $('over-title').textContent = row.winner === 3 ? t('over.draw') : t('over.win', { who });
   let why = row.pieces ? t('over.stuck') : t('over.full');
-  if (row.winner !== 3) {
+  if (wander) {
+    why = row.winner === 3 ? t('over.wanderDraw') : t('over.wander', { n: row.need });
+  } else if (row.winner !== 3) {
     const clean = row.winLine.every((j) => row.cells[j] === row.winner);
     why = clean ? t(row.need === 3 ? 'over.cleanGentle' : 'over.clean') : t('over.slime');
   }
@@ -254,10 +323,23 @@ function refreshHud() {
     $('btn-undo').hidden = true;
     return;
   }
-  chip.textContent = t('hud.turn.' + row.turn);
-  chip.style.background = SIDE_COLORS[row.turn];
-  chip.style.color = row.turn === 1 ? '#1f1710' : '#fff';
+  const side = wander ? wander.turn : row.turn;
+  chip.textContent = t('hud.turn.' + side);
+  chip.style.background = SIDE_COLORS[side];
+  chip.style.color = side === 1 ? '#1f1710' : '#fff';
   let msg;
+  if (wander) {
+    if (row.winner) msg = '';
+    else if (busy) msg = human[side] ? t('hud.crawling') : t('hud.thinking');
+    else if (!human[side]) msg = t('hud.thinking');
+    else if (board.selected != null) msg = t('hud.aim');
+    else if (wander.phase === 'steer') msg = t('hud.flip');
+    else msg = t('hud.place', { left: wander.pieces - wander.count(side) });
+    $('hud-msg').textContent = msg;
+    $('hud-msg').classList.remove('warn');
+    $('btn-undo').hidden = true;
+    return;
+  }
   if (row.winner) msg = '';
   else if (busy && !human[row.turn]) msg = t('hud.thinking');
   else if (busy) msg = t('hud.crawling');
@@ -289,6 +371,6 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
 }
 
 // for browser tests and debugging
-window.snailrow = { get row() { return row; }, get board() { return board; }, newGame, doMove, get opts() { return opts; } };
+window.snailrow = { get row() { return row; }, get board() { return board; }, get wander() { return wander; }, newGame, doMove, doWander, get opts() { return opts; } };
 
 showMenu();
