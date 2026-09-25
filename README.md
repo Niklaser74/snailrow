@@ -42,12 +42,22 @@ Motståndare: en kompis på samma enhet, eller datorn i tre styrkor. På 3×3 sp
 den svåraste perfekt och går aldrig att slå. I Kryp i kapp kan två personer spela
 samtidigt på samma skärm — dragningen börjar i din hage, så fingrarna hålls isär.
 
+**Snigelpost** är för en kompis som inte sitter bredvid dig. Skapa ett parti i
+menyn, skicka länken och dra när ni hinner; spelet säger till med en notis när
+det är din tur. Det fungerar i de tre turbaserade lägena — Kryp i kapp har ingen
+turordning att vänta på.
+
 ## Teknik
 
-Ett PWA utan byggsteg: ES-moduler, ett canvas, inga npm-beroenden och ingen
-server. Fungerar offline, går att installera, sparar partiet åt sig självt i
-`localStorage`. Sniglarna ritas med Snäckmageddons renderare, vendorad in i
-`js/game/` av `npm run sync:game`.
+Ett PWA utan byggsteg: ES-moduler, ett canvas och inga npm-beroenden. Fungerar
+offline, går att installera, sparar partiet åt sig självt i `localStorage`.
+Sniglarna ritas med Snäckmageddons renderare, vendorad in i `js/game/` av
+`npm run sync:game`.
+
+Snigelpost använder seriens Supabase-projekt och konto (hubbens
+`js/account.js`, vendorad av `npm run sync:account`). Servern sparar bara
+draglistan; båda klienterna spelar upp den med reglerna i `js/wire.js`. Se
+`supabase/README.md`.
 
 Reglerna i `js/rules.js`, datorn i `js/ai.js`, realtidsmotorn i `js/race.js` och
 rörelsen i `js/wander.js` rör aldrig DOM, så alla fyra körs och testas i vanlig Node — realtidsmotorn stegas

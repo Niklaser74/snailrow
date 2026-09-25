@@ -15,6 +15,7 @@ Byggstegsfritt PWA: ES-moduler, Canvas, inga npm-beroenden. Bor på
 | Lokal server | `npm start` → http://localhost:8086/ |
 | Tester | `npm test` |
 | Hämta renderare från Snäckmageddon | `npm run sync:game` (default `../dev-snailmageddon`) |
+| Hämta seriens kontoklient från hubben | `npm run sync:account` (default `../dev-snails`) |
 | Ikoner (SVG → PNG) | `npm run icons` (lånar hubbens Playwright) |
 | Produktionslayout | i hubbrepot: `PORT=8081 node scripts/serve.mjs --mount /snailrow=../dev-luffarsnigel` |
 
@@ -26,11 +27,37 @@ js/ai.js      3×3 söks till slutet (minimax); 15×15 får gomoku-heuristik. No
 js/race.js    Kryp i kapp: realtidsmotorn och dess egen hjärna. Noll DOM
 js/wander.js  Vandrande rad: rörelsen, krockreglerna och dess hjärna. Noll DOM
 js/board.js   canvas: rutat papper, sniglarna, slemmet, hagarna, all inmatning
-js/main.js    meny, turordning ELLER realtidsloop, HUD, spara/fortsätt, ljud, PWA
+js/main.js    meny, turordning ELLER realtidsloop, HUD, spara/fortsätt, Snigelpost, ljud, PWA
+js/wire.js    Snigelpost: drag som korta strängar, hela partiet uppspelat. Noll DOM
+js/online.js  Snigelpost: RPC-anropen (snailrow_*)
+js/push.js    Web Push "din tur" (kopia av Snäckschacks, egen edge-funktion)
+js/account.js KOPIA av hubbens kontoklient — rör aldrig, kör sync:account; js/supa.js re-exporterar
 js/i18n.js    sv/en
 js/game/      KOPIOR från snailmageddon — rör aldrig, kör sync:game
+supabase/     migrationer och edge-funktionen snailrow-notify-turn; se supabase/README.md
 test/         handrullade tester utan ramverk, node:assert
 ```
+
+## Snigelpost (spel på distans)
+
+Snällt tre i rad, Luffarsnigel och Vandrande rad går att spela mot en kompis
+på distans: skapa ett parti, skicka länken (`?match=<id>`), dra när du hinner.
+Samma mönster som Snäckschack — inbjudningslänk, ett drag i taget, klienten
+frågar servern var åttonde sekund medan den väntar, och push när det är din tur.
+Kryp i kapp går inte: det har ingen turordning.
+
+Servern (`snailrow_*` i Supabase-projektet `snails`) sparar bara draglistan och
+kontrollerar tur, ordning och form. **Reglerna finns bara i klienten**: båda
+spelar upp hela listan med `wire.replay()`, och ett drag som inte går att spela
+upp ger ett trasigt parti i stället för en gissad ställning. Därför måste varje
+regeländring i `rules.js` eller `wander.js` som ändrar vad ett drag *betyder*
+hanteras så att gamla partier fortfarande spelas upp likadant — annars går
+pågående partier sönder. `test/wire.test.mjs` spelar hela partier fram och
+tillbaka genom strängformatet.
+
+Onlinepartier sparas inte i `localStorage` (servern har dem); bara
+`snailrow.seen.<id>` minns vilket drag den här enheten senast visade, så att
+motståndarens senaste drag kan spelas upp med sitt kryp.
 
 ## Reglerna, och varför de ser ut så
 
@@ -140,6 +167,9 @@ läge, och `Wander.toJSON` tar med riktningarna.
 ## Rör inte
 
 - `js/game/*` — kopior. Ändra uppströms i snailmageddon och kör `npm run sync:game`.
+- `js/account.js` — hubbens kontoklient. Ändra i hubben och kör `npm run sync:account`.
+  Nya krav på anroparen (som `online.startAuth()`) måste följas upp här också.
+- `supabase/migrations/*` — appliceras aldrig om; ändringar är nya filer.
 - `manifest.id` — appens identitet på den delade originen.
 
 ## Innan du är klar
