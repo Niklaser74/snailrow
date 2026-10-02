@@ -180,7 +180,7 @@ function resumeGame() {
 }
 
 function save() {
-  if (race || match) return;         // realtime games are not saved; online ones live on the server                  // realtime games are not saved
+  if (race || match) return;         // realtime games are not saved; online ones live on the server
   if (!row || row.winner) { store.del('game'); return; }
   if (wander) { store.set('game', { wander: wander.toJSON(), opts, human }); return; }
   store.set('game', { row: row.toJSON(), opts, human });
