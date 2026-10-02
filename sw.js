@@ -1,6 +1,6 @@
 // Service worker: cache-first app shell so the game works offline.
 // Cache names are prefixed per game: everything on snails.se shares one origin.
-const VERSION = 'snailrow-v6';
+const VERSION = 'snailrow-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -59,8 +59,9 @@ self.addEventListener('notificationclick', (e) => {
   e.notification.close();
   const url = (e.notification.data && e.notification.data.url) || './';
   e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+    // only our own windows: every game on snails.se shares the origin
     for (const c of list) {
-      if ('focus' in c) { if ('navigate' in c) c.navigate(url); return c.focus(); }
+      if (c.url.includes('/snailrow/') && 'focus' in c) { if ('navigate' in c) c.navigate(url); return c.focus(); }
     }
     return clients.openWindow(url);
   }));

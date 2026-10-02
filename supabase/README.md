@@ -40,6 +40,16 @@ användar-id.
 Samma läge, färgerna byts: den som var Blå börjar. Den första som trycker
 skapar partiet och det gamla får `rematch` satt; den andra hamnar i samma.
 
+## Push-prenumerationer
+
+`snailrow_push_subscriptions` med `snailrow_save_push/remove_push` är Luffarsnigels egna
+(sedan 2026-10-02, som Snigelkrattan, Snail Story och Snailman). Den delade
+`snails_push_subscriptions` saknar spelkolumn, så notiser läckte mellan spelen.
+`snailrow_save_push` tar också bort samma endpoint ur den delade tabellen;
+`js/push.js` anropar den vid start, så gamla prenumerationer flyttas när
+Luffarsnigel öppnas. `snailrow-notify-turn` läser och städar bara den egna tabellen.
+Test: `tests/snailrow_push.sql`.
+
 ## Migrationer
 
 `migrations/*.sql` i filnamnsordning. Applicera med Supabase MCP
