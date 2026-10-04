@@ -78,3 +78,12 @@ footer a { color: inherit; }
 #online-list .mnone { color: var(--muted); font-size: 13px; padding: 6px 2px; }
 .link-row { display: flex; gap: 6px; margin: 10px 0 12px; flex-wrap: wrap; }
 .link-row input { flex: 1 1 100%; font: inherit; font-size: 12px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+
+/* Svitlistan */
+.streak-line { margin: 10px 0 0; text-align: center; font-weight: 700; color: var(--accent); }
+.streak-list { list-style: none; display: grid; gap: 6px; padding: 0; margin: 8px 0; }
+.streak-list .mrow { display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
+.streak-list .mrow.turn { border-color: var(--accent); box-shadow: inset 4px 0 0 var(--accent); }
+.streak-list .mwho { flex: 1; font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.streak-list .mdays { font-weight: 800; font-variant-numeric: tabular-nums; }
+#streak-me { margin: 6px 0 0; text-align: center; font-weight: 800; color: var(--accent); }

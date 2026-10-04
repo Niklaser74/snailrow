@@ -1,6 +1,6 @@
 // Bumped when the shipped files change, so the menu can show what is running.
 // Keep it in step with the sw.js cache version.
-export const APP_VERSION = 'v8';
+export const APP_VERSION = 'v9';
 // Snigelpost (remote play). The Supabase publishable key is public by design:
 // every table is closed and the RPCs check auth.uid(). Same project and
 // accounts as the other snail games; the tables are prefixed snailrow_.

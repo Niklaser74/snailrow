@@ -82,3 +82,31 @@ namnet för värd och gäst, och triggern `*_profile_renamed` på
 `snails_profiles` tar ett namnbyte till alla partier. Namnfältet i spelet
 visar och sparar kontots namn. Samma regel som i Snailman och Snigelkrattan
 (`20261004140000_*_profile_names.sql`).
+
+## Svitlistan (2026-10-04)
+
+Dagar i rad med ett avslutat parti (alla lägen) eller ett Snigelpost-drag, i
+svensk tid. Frivilligt: spelet räknar alltid sviten lokalt (`js/streak.js`,
+`snailrow.streakDays`). Den som trycker "Var med på svitlistan" får ett
+anonymt konto, och därifrån räknar servern.
+
+| Objekt | Vad |
+| --- | --- |
+| `snailrow_streakers` | de som är med: namn och bästa svit |
+| `snailrow_days` | en rad per spelad dag (drygt ett år sparas) |
+| `snailrow_streak_join/played/board/leave` | listan; `leave` raderar spelarens dagar |
+| `snailrow_streak_current(uid)` (intern) | dagar i rad som slutar i dag eller i går |
+| `snailrow_streak_leader()` | **öppen för anon**: längsta pågående svit (namn, antal dagar som `score`) och hur många som har en, för hubbens kort |
+
+Test: `tests/snailrow_streak.sql` och `test/streak.test.mjs` (lokal räkning,
+svensk tid, och att varje RPC finns i en migration med rättigheter).
+
+## Namn
+
+Namnen i ett parti är kontots: profilnamnet i `snails_profiles`
+(snails.se/account/) när spelaren valt ett, annars det namn spelet skickade.
+"Snäcka" räknas inte som ett val. En before-trigger på partitabellen sätter
+namnet för värd och gäst, och triggern `*_profile_renamed` på
+`snails_profiles` tar ett namnbyte till alla partier. Namnfältet i spelet
+visar och sparar kontots namn. Samma regel som i Snailman och Snigelkrattan
+(`20261004140000_*_profile_names.sql`).
