@@ -72,3 +72,13 @@ eller Supabase MCP `deploy_edge_function` med `index.ts` + `webpush.js`
 hit med `npm run sync:account` — redigera den aldrig här. `js/supa.js`
 re-exporterar den. Sessionen ligger under `snails.session`, det enda undantaget
 från regeln att nycklar prefixas `snailrow.`.
+
+## Namn
+
+Namnen i ett parti är kontots: profilnamnet i `snails_profiles`
+(snails.se/account/) när spelaren valt ett, annars det namn spelet skickade.
+"Snäcka" räknas inte som ett val. En before-trigger på partitabellen sätter
+namnet för värd och gäst, och triggern `*_profile_renamed` på
+`snails_profiles` tar ett namnbyte till alla partier. Namnfältet i spelet
+visar och sparar kontots namn. Samma regel som i Snailman och Snigelkrattan
+(`20261004140000_*_profile_names.sql`).
